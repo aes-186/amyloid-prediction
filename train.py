@@ -14,9 +14,11 @@ args = parser.parse_args()
     config_path=os.path.join(ROOT_DIR, "config", args.config_folder),
     config_name="config",
 )
+
 def my_app(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
 
 if __name__ == "__main__":
     my_app()
+

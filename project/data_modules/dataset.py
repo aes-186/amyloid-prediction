@@ -5,43 +5,82 @@ from pyrsistent import optional
 import torch
 import torch.utils.data
 import monai.transforms
-import radio.data as radata
+import radio.data as radata 
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 from project.misc import nifti_helpers
 import pandas as pd
 import numpy as np
 
+import utils
+
+
+
+"""
+Dataset based on PyTorch data primitive
+Abstract Base Class - 'BaseVisionDataset' for vision datasets.
+"""
+
 
 Sample = List[Tuple[Path, Any]]
+
 OneSample = Union[Dict[str, Tuple[Any, ...]], Tuple[Any, ...]]
+
+""" (Anzu's Notes)
+    Functions from parent class 
+    
+    find_classes(directory: Path) (Finds class folders in a dataset)
+    make_dataset (Generates list of samples of form (path_to_sample, class) )
+"""
+
 
 # TODO: make something to compile subject ID, scan ID and target
 
 
-class DepDataModule(radata.BaseVisionDataset):
+# TODO: rename this class to be AmyloidDataset 
+# Original class name (DepDataModule)
+class AmyloidDataset(radata.BaseVisionDataset):
+    
     """
     This class will be based on the folder dataset
     in radio for our specific project
+    
+    BaseVisionDataset - base class for making datasets that are compatible with torchvision 
+    
+    Must override __getitem__ and __len__ methods.
+    
+    To create subclass must implement __init__ , __len__ , __getitem__ 
+    
     """
-
-    def __init__(
+    
+    def __init__( 
+                 
         self,
-        root: Path,
-        base_csv: pd.DataFrame,
-        loader: Callable[[Path], Any],
-        subjectCol: Optional[str] = None,
-        scanCol: Optional[str] = None,
+        root: Path, 
+        base_csv: pd.DataFrame, 
+        loader: Callable[[Path], Any], 
+        
+        subjectCol: Optional[str] = None, 
+        scanCol: Optional[str] = None, 
         target_col: Optional[list[str]] = None,
+        
         transform: Optional[Callable] = None,
+        
         target_transform: Optional[Callable] = None,
+        
         extensions: Optional[Tuple[str, ...]] = None,
         is_valid_file: Optional[Callable[[Path], bool]] = None,
         return_paths: bool = False,
         max_class_size: int = 10,
         max_dataset_size: int = 9223372036854775807,
-        subject_list: list[str] = None,
+        
+        subject_list: list[str] = None, #array of IDs to be used (?)
+        
     ) -> None:
+        
+        # still inside init function 
+        # calling init of parent class (inherited from radio) 
+        
         super().__init__(
             root,
             loader,
@@ -53,8 +92,15 @@ class DepDataModule(radata.BaseVisionDataset):
             max_class_size,
             max_dataset_size,
         )
+        
+        # read in subject list csv file 
+        logging.info("Using subject list") 
+        
         self.subject_list = subject_list
+        
         self.data = pd.read_csv(base_csv)
+        
+        # make dataset 
         samples = self.make_dataset(
             self.root, self.subject_list, self.targets, extensions,
         )
@@ -63,7 +109,7 @@ class DepDataModule(radata.BaseVisionDataset):
             msg = (f"Found 0 samples in: {root}. \n Supported ",)
             raise RuntimeError(msg)
 
-        self.subjectCol = subjectCol
+        self.subjectCol = subjectCol 
         self.scanCol = scanCol
         if self.subjectCol is None or self.scanCol is None:
             self.IDs = self.get_IDs(root=root)
@@ -79,7 +125,7 @@ class DepDataModule(radata.BaseVisionDataset):
             self.max_dataset_size,
         )
 
-    @staticmethod
+    @staticmethod 
     def get_IDs(root, extra_folder: str = ""):
         folders = os.listdir(root)
         sub_names = []
@@ -128,6 +174,9 @@ class DepDataModule(radata.BaseVisionDataset):
             }
         )
 
+
+    # TODO: start here!
+    # HELPFUL FUNCTION TO MAKE DATASET! 
     def make_dataset(
         self,
         directory: Path,
@@ -176,7 +225,12 @@ class DepDataModule(radata.BaseVisionDataset):
 
         return instances
 
+    # Must implement this method because it's an abstract method in the base class 
     def __getitem__(self, idx: int) -> OneSample:
+        # check tensor dtype
+        # return formatted as a tuple (not dict) 
+        
+        
         """
         Parameters
         ----------
@@ -190,17 +244,84 @@ class DepDataModule(radata.BaseVisionDataset):
             (sample, target, path) if ``self.return_paths`` is True.
         """
         path, target = self.samples[idx]
+        
         sample = self.loader(path)
+        
         if self.transform is not None:
             sample = self.transform(sample)
+            
         if self.target_transform is not None:
             target = self.target_transform(target)
+            
         if self.return_paths:
             return sample, target, path
+        
         return sample, target
 
+    # Must implement because it's an abstract method in the parent class 
     def __len__(self) -> int:
-        """Return the total number of images"""
+        """Return the total number of images""" 
         return len(self.samples)
+
+
+# TODO: check this class (?) 
+class AmyloidDataloader( DataLoader ):
+
+    def __init__(self, dataset=None, **Params):
+        
+        """dataloader for Amyloid data
+    
+        This class allows user to create a dataloader to automatically wrap the 
+        dataset class for experiment being performed.
+        
+        Args:
+            batch_size (int): batch size used for training
+            shuffle (bool): if you want
+            num_workers (int): number of workers to multithread dataloading
+            pin_memory (bool): set whether to pin memory for cuda acceleration.
+                Set in the train.py script
+            subjects_list (list[filepaths]): array of csv filepaths with subjects
+                if you use this dataset and loader will be dictionaries Dataset parameters
+                detailed above if initializing dataset within this class
+            oversample (str): If specified used to eval() which algorithm to use for
+                oversampling minority. Do not use with 'undersample.'
+            undersample (str): If specified used to eval() which algorithm to use for
+                undersampling majority 'oversample.'
+        
+        """
+        
+        self.dataset = dataset 
+        self.batch_size = Params["batch_size"]
+        self.shuffle = Params["shuffle"]
+        self.min = None
+        self.max = None 
+    
+    # TODO: continue making DataLoader class
+    
+    def getLoader(self):
+        return self.loader 
+    
+    
+
+if __name__ == "__main__":
+    
+    test_params = {
+        "transformations":"None",
+        "csv_file":"../data/filename.csv", #TODO: check this
+        "batch_size": 1,
+        "shuffle":"True",
+        "features": [ 
+            #TODO: add features here
+        ],
+        "labels": [ 
+            #TODO: add labels here 
+        ]
+         
+    }
+    
+    utils.set_logger(os.path.join(".","debug.log"))
+    logging.info("Loading the datasets...") 
+    
+    test_loader = AmyloidDataLoader(**test_params)
 
 
